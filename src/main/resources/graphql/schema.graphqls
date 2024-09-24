@@ -1,0 +1,73 @@
+type Query {
+    getReviewForPullRequest(repoOwner: String!, repoName: String!, pullRequestNumber: Int!): CodeReview
+    getReviewHistory(repoOwner: String!, repoName: String!): [CodeReview]
+}
+
+type Mutation {
+    triggerReview(repoOwner: String!, repoName: String!, pullRequestNumber: Int!): CodeReview
+    updateRuleSet(ruleSetInput: RuleSetInput!): RuleSet
+}
+
+type CodeReview {
+    id: ID!
+    pullRequestNumber: Int!
+    status: ReviewStatus!
+    codeQualityScore: Float
+    securityScore: Float
+    performanceScore: Float
+    issues: [Issue]
+    createdAt: String!
+}
+
+type Issue {
+    id: ID!
+    type: IssueType!
+    severity: IssueSeverity!
+    file: String!
+    line: Int
+    message: String!
+}
+
+type RuleSet {
+    id: ID!
+    name: String!
+    rules: [Rule]
+}
+
+type Rule {
+    id: ID!
+    name: String!
+    description: String
+    enabled: Boolean!
+}
+
+input RuleSetInput {
+    name: String!
+    rules: [RuleInput]!
+}
+
+input RuleInput {
+    name: String!
+    description: String
+    enabled: Boolean!
+}
+
+enum ReviewStatus {
+    IN_PROGRESS
+    COMPLETED
+    FAILED
+}
+
+enum IssueType {
+    CODE_STYLE
+    POTENTIAL_BUG
+    SECURITY_VULNERABILITY
+    PERFORMANCE_ISSUE
+}
+
+enum IssueSeverity {
+    LOW
+    MEDIUM
+    HIGH
+    CRITICAL
+}
