@@ -68,6 +68,33 @@
 			<artifactId>spring-graphql-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- GitHub API -->
+		<dependency>
+			<groupId>org.kohsuke</groupId>
+			<artifactId>github-api</artifactId>
+			<version>1.315</version>
+		</dependency>
+
+		<!-- JavaParser for code analysis -->
+		<dependency>
+			<groupId>com.github.javaparser</groupId>
+			<artifactId>javaparser-symbol-solver-core</artifactId>
+			<version>3.25.5</version>
+		</dependency>
+
+		<!-- CheckStyle for code style checks -->
+		<dependency>
+			<groupId>com.puppycrawl.tools</groupId>
+			<artifactId>checkstyle</artifactId>
+			<version>10.12.3</version>
+		</dependency>
+
+		<!-- SpotBugs for bug detection -->
+		<dependency>
+			<groupId>com.github.spotbugs</groupId>
+			<artifactId>spotbugs</artifactId>
+			<version>4.8.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>
