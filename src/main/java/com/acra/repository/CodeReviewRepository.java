@@ -1,4 +1,4 @@
-package com.acra;
+package com.acra.repository;
 import com.acra.model.CodeReview;
 import com.acra.model.ReviewStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
