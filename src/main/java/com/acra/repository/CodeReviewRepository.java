@@ -67,4 +67,8 @@ public class CodeReviewRepository {
         String sql = "DELETE FROM code_reviews WHERE id = ?";
         jdbcTemplate.update(sql, id);
     }
+    public List<CodeReview> findAll() {
+        String sql = "SELECT * FROM code_reviews";
+        return jdbcTemplate.query(sql, rowMapper);
+    }
 }

@@ -1,18 +1,21 @@
 package com.acra.service;
 
 import com.acra.exception.ReviewNotFoundException;
-import com.acra.model.CodeReview;
-import com.acra.model.Issue;
-import com.acra.model.PullRequest;
-import com.acra.model.ReviewStatus;
+import com.acra.model.*;
 import com.acra.repository.CodeReviewRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class CodeReviewService {
+    private static final Logger logger = LoggerFactory.getLogger(CodeReviewService.class);
+
     private final CodeReviewRepository repository;
     private final GitHubService gitHubService;
 
@@ -22,63 +25,81 @@ public class CodeReviewService {
     }
 
     public CodeReview initiateReview(String repoOwner, String repoName, int pullRequestNumber) {
-        // Fetch pull request details from GitHub
         PullRequest pullRequest = gitHubService.getPullRequest(repoOwner, repoName, pullRequestNumber);
 
-        // Create a new CodeReview object
         CodeReview review = new CodeReview();
         review.setPullRequestNumber(pullRequestNumber);
         review.setStatus(ReviewStatus.IN_PROGRESS);
         review.setCreatedAt(Instant.now());
+        review.setRepoOwner(repoOwner);
+        review.setRepoName(repoName);
 
-        // Save the initial review
         review = repository.save(review);
 
-        // Start the review process asynchronously
         asyncReviewProcess(review, pullRequest);
 
         return review;
     }
 
-    private void asyncReviewProcess(CodeReview review, PullRequest pullRequest) {
-        // This method would be annotated with @Async in a real implementation
-        // Perform code analysis
-        List<Issue> issues = performCodeAnalysis(pullRequest);
+    @Async
+    public void asyncReviewProcess(CodeReview review, PullRequest pullRequest) {
+        try {
+            List<String> files = gitHubService.getPullRequestFiles(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
+            String diff = gitHubService.getPullRequestDiff(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
 
-        // Calculate scores
-        float codeQualityScore = calculateCodeQualityScore(issues);
-        float securityScore = calculateSecurityScore(issues);
-        float performanceScore = calculatePerformanceScore(issues);
+            List<Issue> issues = performCodeAnalysis(files, diff);
 
-        // Update the review
-        review.setIssues(issues);
-        review.setCodeQualityScore(codeQualityScore);
-        review.setSecurityScore(securityScore);
-        review.setPerformanceScore(performanceScore);
-        review.setStatus(ReviewStatus.COMPLETED);
+            float codeQualityScore = calculateCodeQualityScore(issues);
+            float securityScore = calculateSecurityScore(issues);
+            float performanceScore = calculatePerformanceScore(issues);
 
-        repository.update(review);
+            review.setIssues(issues);
+            review.setCodeQualityScore(codeQualityScore);
+            review.setSecurityScore(securityScore);
+            review.setPerformanceScore(performanceScore);
+            review.setStatus(ReviewStatus.COMPLETED);
+
+            repository.update(review);
+        } catch (Exception e) {
+            logger.error("Error during async review process", e);
+            review.setStatus(ReviewStatus.FAILED);
+            repository.update(review);
+        }
     }
 
-    private List<Issue> performCodeAnalysis(PullRequest pullRequest) {
-        // Implement code analysis logic
-        // This is a placeholder implementation
-        return new ArrayList<>();
+    private List<Issue> performCodeAnalysis(List<String> files, String diff) {
+        List<Issue> issues = new ArrayList<>();
+        // TODO: Implement actual code analysis logic
+        // This might involve parsing the diff, analyzing each file, and applying coding rules
+        // You may want to integrate with a code analysis tool or implement custom logic
+
+        Issue sampleIssue = new Issue();
+        sampleIssue.setType(IssueType.CODE_STYLE);
+        sampleIssue.setSeverity(IssueSeverity.LOW);
+        sampleIssue.setFile("file.java");
+        sampleIssue.setLine(10);
+        sampleIssue.setMessage("Sample issue: Incorrect indentation");
+        issues.add(sampleIssue);
+
+        return issues;
     }
 
     private float calculateCodeQualityScore(List<Issue> issues) {
-        // Implement score calculation logic
-        return 0.0f;
+        // TODO: Implement a more sophisticated scoring algorithm
+        // This could involve weighing different types of issues, considering their severity, etc.
+        return 100 - (issues.size() * 5); // Deduct 5 points for each issue
     }
 
     private float calculateSecurityScore(List<Issue> issues) {
-        // Implement score calculation logic
-        return 0.0f;
+        // TODO: Implement a more nuanced security scoring system
+        // This could involve categorizing security issues by severity and impact
+        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY).count() * 10);
     }
 
     private float calculatePerformanceScore(List<Issue> issues) {
-        // Implement score calculation logic
-        return 0.0f;
+        // TODO: Implement a more comprehensive performance scoring system
+        // This could involve analyzing complexity, potential bottlenecks, etc.
+        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE).count() * 7);
     }
 
     public CodeReview getReviewForPullRequest(String repoOwner, String repoName, int pullRequestNumber) {

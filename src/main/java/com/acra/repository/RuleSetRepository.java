@@ -87,6 +87,21 @@ public class RuleSetRepository {
             return ruleSet;
         }
     }
+    @Transactional
+    public void deleteById(Long id) {
+        // First, delete all rules associated with this rule set
+        String deleteRulesSql = "DELETE FROM rules WHERE rule_set_id = ?";
+        jdbcTemplate.update(deleteRulesSql, id);
+
+        // Then, delete the rule set itself
+        String deleteRuleSetSql = "DELETE FROM rule_sets WHERE id = ?";
+        jdbcTemplate.update(deleteRuleSetSql, id);
+    }
+    public boolean existsById(Long id) {
+        String sql = "SELECT COUNT(*) FROM rule_sets WHERE id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, id);
+        return count != null && count > 0;
+    }
 
     private static class RuleRowMapper implements RowMapper<Rule> {
         @Override
