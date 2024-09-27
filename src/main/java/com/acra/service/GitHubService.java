@@ -4,6 +4,8 @@ import com.acra.model.PullRequest;
 import org.kohsuke.github.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -11,6 +13,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class GitHubService {
+    private static final Logger logger = LoggerFactory.getLogger(GitHubService.class);
 
     private final GitHub github;
 
@@ -22,9 +25,9 @@ public class GitHubService {
         try {
             GHRepository repository = github.getRepository(repoOwner + "/" + repoName);
             GHPullRequest ghPullRequest = repository.getPullRequest(pullRequestNumber);
-
             return convertToPullRequest(ghPullRequest);
         } catch (IOException e) {
+            logger.error("Error fetching pull request from GitHub", e);
             throw new RuntimeException("Error fetching pull request from GitHub", e);
         }
     }
@@ -33,12 +36,12 @@ public class GitHubService {
         try {
             GHRepository repository = github.getRepository(repoOwner + "/" + repoName);
             GHPullRequest ghPullRequest = repository.getPullRequest(pullRequestNumber);
-
             return ghPullRequest.listFiles().toList()
                     .stream()
                     .map(GHPullRequestFileDetail::getFilename)
                     .collect(Collectors.toList());
         } catch (IOException e) {
+            logger.error("Error fetching pull request files from GitHub", e);
             throw new RuntimeException("Error fetching pull request files from GitHub", e);
         }
     }
@@ -47,9 +50,9 @@ public class GitHubService {
         try {
             GHRepository repository = github.getRepository(repoOwner + "/" + repoName);
             GHPullRequest ghPullRequest = repository.getPullRequest(pullRequestNumber);
-
             return ghPullRequest.getDiffUrl().toString();
         } catch (IOException e) {
+            logger.error("Error fetching pull request diff from GitHub", e);
             throw new RuntimeException("Error fetching pull request diff from GitHub", e);
         }
     }
