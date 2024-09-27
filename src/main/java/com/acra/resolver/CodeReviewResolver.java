@@ -1,5 +1,6 @@
 package com.acra.resolver;
 
+
 import com.acra.model.CodeReview;
 import com.acra.model.RuleSet;
 import com.acra.service.CodeReviewService;
@@ -13,7 +14,6 @@ import java.util.List;
 
 @Controller
 public class CodeReviewResolver {
-
     private final CodeReviewService codeReviewService;
     private final RuleSetService ruleSetService;
 
