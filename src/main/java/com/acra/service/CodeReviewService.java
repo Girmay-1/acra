@@ -105,21 +105,43 @@ public class CodeReviewService {
     }
 
     private float calculateCodeQualityScore(List<Issue> issues) {
-        // TODO: Implement a more sophisticated scoring algorithm
-        // This could involve weighing different types of issues, considering their severity, etc.
-        return 100 - (issues.size() * 5); // Deduct 5 points for each issue
+        int weightedIssues = issues.stream()
+                .mapToInt(issue -> getWeightForSeverity(issue.getSeverity()))
+                .sum();
+
+        return Math.max(0, 100 - (weightedIssues * 2));
     }
 
+    private int getWeightForSeverity(IssueSeverity severity) {
+        switch (severity) {
+            case LOW:
+                return 1;
+            case MEDIUM:
+                return 3;
+            case HIGH:
+                return 5;
+            case CRITICAL:
+                return 10;
+            default:
+                return 0;
+        }
+    }
+
+
     private float calculateSecurityScore(List<Issue> issues) {
-        // TODO: Implement a more nuanced security scoring system
-        // This could involve categorizing security issues by severity and impact
-        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY).count() * 10);
+        long securityIssues = issues.stream()
+                .filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY)
+                .count();
+
+        return Math.max(0, 100 - (securityIssues * 20));
     }
 
     private float calculatePerformanceScore(List<Issue> issues) {
-        // TODO: Implement a more comprehensive performance scoring system
-        // This could involve analyzing complexity, potential bottlenecks, etc.
-        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE).count() * 7);
+        long performanceIssues = issues.stream()
+                .filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE)
+                .count();
+
+        return Math.max(0, 100 - (performanceIssues * 15));
     }
 
     public CodeReview getReviewForPullRequest(String repoOwner, String repoName, int pullRequestNumber) {
