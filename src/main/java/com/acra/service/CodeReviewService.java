@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -69,37 +70,78 @@ public class CodeReviewService {
 
     private List<Issue> performCodeAnalysis(List<String> files, String diff) {
         List<Issue> issues = new ArrayList<>();
-        // TODO: Implement actual code analysis logic
-        // This might involve parsing the diff, analyzing each file, and applying coding rules
-        // You may want to integrate with a code analysis tool or implement custom logic
 
-        Issue sampleIssue = new Issue();
-        sampleIssue.setType(IssueType.CODE_STYLE);
-        sampleIssue.setSeverity(IssueSeverity.LOW);
-        sampleIssue.setFile("file.java");
-        sampleIssue.setLine(10);
-        sampleIssue.setMessage("Sample issue: Incorrect indentation");
-        issues.add(sampleIssue);
+        for (String file : files) {
+            if (file.endsWith(".java")) {
+                // Simple analysis for Java files
+                List<String> lines = Arrays.asList(diff.split("\n"));
+                for (int i = 0; i < lines.size(); i++) {
+                    String line = lines.get(i);
+                    if (line.startsWith("+")) { // New line added
+                        if (line.length() > 120) {
+                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.LOW, file, i + 1, "Line length exceeds 120 characters"));
+                        }
+                        if (line.contains("System.out.println")) {
+                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.LOW, file, i + 1, "Avoid using System.out.println in production code"));
+                        }
+                        if (line.contains("catch (Exception e)")) {
+                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.MEDIUM, file, i + 1, "Catch specific exceptions instead of generic Exception"));
+                        }
+                    }
+                }
+            }
+        }
 
         return issues;
     }
-
-    private float calculateCodeQualityScore(List<Issue> issues) {
-        // TODO: Implement a more sophisticated scoring algorithm
-        // This could involve weighing different types of issues, considering their severity, etc.
-        return 100 - (issues.size() * 5); // Deduct 5 points for each issue
+    private Issue createIssue(IssueType type, IssueSeverity severity, String file, int line, String message) {
+        Issue issue = new Issue();
+        issue.setType(type);
+        issue.setSeverity(severity);
+        issue.setFile(file);
+        issue.setLine(line);
+        issue.setMessage(message);
+        return issue;
     }
 
+    private float calculateCodeQualityScore(List<Issue> issues) {
+        int weightedIssues = issues.stream()
+                .mapToInt(issue -> getWeightForSeverity(issue.getSeverity()))
+                .sum();
+
+        return Math.max(0, 100 - (weightedIssues * 2));
+    }
+
+    private int getWeightForSeverity(IssueSeverity severity) {
+        switch (severity) {
+            case LOW:
+                return 1;
+            case MEDIUM:
+                return 3;
+            case HIGH:
+                return 5;
+            case CRITICAL:
+                return 10;
+            default:
+                return 0;
+        }
+    }
+
+
     private float calculateSecurityScore(List<Issue> issues) {
-        // TODO: Implement a more nuanced security scoring system
-        // This could involve categorizing security issues by severity and impact
-        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY).count() * 10);
+        long securityIssues = issues.stream()
+                .filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY)
+                .count();
+
+        return Math.max(0, 100 - (securityIssues * 20));
     }
 
     private float calculatePerformanceScore(List<Issue> issues) {
-        // TODO: Implement a more comprehensive performance scoring system
-        // This could involve analyzing complexity, potential bottlenecks, etc.
-        return 100 - (issues.stream().filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE).count() * 7);
+        long performanceIssues = issues.stream()
+                .filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE)
+                .count();
+
+        return Math.max(0, 100 - (performanceIssues * 15));
     }
 
     public CodeReview getReviewForPullRequest(String repoOwner, String repoName, int pullRequestNumber) {
