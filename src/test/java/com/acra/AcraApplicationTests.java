@@ -1,4 +1,4 @@
-package com.acra.acra;
+package com.acra;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
