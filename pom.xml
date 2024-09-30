@@ -109,6 +109,16 @@
 			<artifactId>dotenv-java</artifactId>
 			<version>2.3.1</version>
 		</dependency>
+		<dependency>
+			<groupId>org.sonarsource.sonarqube</groupId>
+			<artifactId>sonar-ws</artifactId>
+			<version>9.9.0.65466</version>
+		</dependency>
+		<dependency>
+			<groupId>com.puppycrawl.tools</groupId>
+			<artifactId>checkstyle</artifactId>
+			<version>10.3.4</version>
+		</dependency>
 	</dependencies>
 
 	<build>
