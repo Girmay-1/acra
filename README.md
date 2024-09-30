@@ -55,4 +55,4 @@ The Automated Code Review Assistant (ACRA) is a system that integrates with vers
 Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
 
 ## License
-This project is licensed under the MIT License - see the LICENSE.md file for details
+This project is licensed under the Apache-2.0 - see the LICENSE.md file for details
