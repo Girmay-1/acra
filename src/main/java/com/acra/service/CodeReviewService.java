@@ -3,6 +3,7 @@ package com.acra.service;
 import com.acra.exception.ReviewNotFoundException;
 import com.acra.model.*;
 import com.acra.repository.CodeReviewRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Async;
 import org.slf4j.Logger;
@@ -144,6 +145,7 @@ public class CodeReviewService {
         return Math.max(0, 100 - (performanceIssues * 15));
     }
 
+    @Cacheable(value = "reviewCache", key = "{#repoOwner, #repoName, #pullRequestNumber}")
     public CodeReview getReviewForPullRequest(String repoOwner, String repoName, int pullRequestNumber) {
         return repository.findByRepoOwnerAndRepoName(repoOwner, repoName).stream()
                 .filter(review -> review.getPullRequestNumber() == pullRequestNumber)
@@ -151,6 +153,7 @@ public class CodeReviewService {
                 .orElseThrow(() -> new ReviewNotFoundException("Review not found for the given pull request"));
     }
 
+    @Cacheable(value = "reviewHistoryCache", key = "{#repoOwner, #repoName}")
     public List<CodeReview> getReviewHistory(String repoOwner, String repoName) {
         return repository.findByRepoOwnerAndRepoName(repoOwner, repoName);
     }
