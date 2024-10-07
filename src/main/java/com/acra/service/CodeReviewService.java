@@ -13,6 +13,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 public class CodeReviewService {
@@ -21,9 +23,15 @@ public class CodeReviewService {
     private final CodeReviewRepository repository;
     private final GitHubService gitHubService;
 
-    public CodeReviewService(CodeReviewRepository repository, GitHubService gitHubService) {
+    private final CheckStyleService checkStyleService;
+
+    private final SonarQubeService sonarQubeService;
+
+    public CodeReviewService(CodeReviewRepository repository, GitHubService gitHubService, CheckStyleService checkStyleService, SonarQubeService sonarQubeService) {
         this.repository = repository;
         this.gitHubService = gitHubService;
+        this.checkStyleService = checkStyleService;
+        this.sonarQubeService = sonarQubeService;
     }
 
     public CodeReview initiateReview(String repoOwner, String repoName, int pullRequestNumber) {
@@ -49,7 +57,14 @@ public class CodeReviewService {
             List<String> files = gitHubService.getPullRequestFiles(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
             String diff = gitHubService.getPullRequestDiff(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
 
-            List<Issue> issues = performCodeAnalysis(files, diff);
+            List<CompletableFuture<List<Issue>>> futureIssues = files.parallelStream()
+                    .map(file -> CompletableFuture.supplyAsync(() ->
+                            analyzeFile(review.getRepoOwner(), review.getRepoName(), file, diff)))
+                    .collect(Collectors.toList());
+
+            List<Issue> issues = futureIssues.stream()
+                    .flatMap(future -> future.join().stream())
+                    .collect(Collectors.toList());
 
             float codeQualityScore = calculateCodeQualityScore(issues);
             float securityScore = calculateSecurityScore(issues);
@@ -69,40 +84,20 @@ public class CodeReviewService {
         }
     }
 
-    private List<Issue> performCodeAnalysis(List<String> files, String diff) {
+    private List<Issue> analyzeFile(String repoOwner, String repoName, String file, String diff) {
+
         List<Issue> issues = new ArrayList<>();
-
-        for (String file : files) {
-            if (file.endsWith(".java")) {
-                // Simple analysis for Java files
-                List<String> lines = Arrays.asList(diff.split("\n"));
-                for (int i = 0; i < lines.size(); i++) {
-                    String line = lines.get(i);
-                    if (line.startsWith("+")) { // New line added
-                        if (line.length() > 120) {
-                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.LOW, file, i + 1, "Line length exceeds 120 characters"));
-                        }
-                        if (line.contains("System.out.println")) {
-                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.LOW, file, i + 1, "Avoid using System.out.println in production code"));
-                        }
-                        if (line.contains("catch (Exception e)")) {
-                            issues.add(createIssue(IssueType.CODE_STYLE, IssueSeverity.MEDIUM, file, i + 1, "Catch specific exceptions instead of generic Exception"));
-                        }
-                    }
-                }
-            }
+        String projectKey  = repoName + "_" + repoName;
+        if (file.endsWith(".java")) {
+            issues.addAll(checkStyleService.analyzeJavaFile(file, diff));
+            issues.addAll(sonarQubeService.analyzeJavaFile(projectKey, file));
+        } else if (file.endsWith(".py")) {
+            issues.addAll(sonarQubeService.analyzePythonFile(projectKey, file));
+        } else if (file.endsWith(".js")) {
+            issues.addAll(sonarQubeService.analyzeJavaScriptFile(projectKey, file));
         }
-
+        // Add more file type checks as needed
         return issues;
-    }
-    private Issue createIssue(IssueType type, IssueSeverity severity, String file, int line, String message) {
-        Issue issue = new Issue();
-        issue.setType(type);
-        issue.setSeverity(severity);
-        issue.setFile(file);
-        issue.setLine(line);
-        issue.setMessage(message);
-        return issue;
     }
 
     private float calculateCodeQualityScore(List<Issue> issues) {
