@@ -3,6 +3,7 @@ package com.acra.service;
 import com.acra.exception.ReviewNotFoundException;
 import com.acra.model.*;
 import com.acra.repository.CodeReviewRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Async;
@@ -27,6 +28,7 @@ public class CodeReviewService {
 
     private final SonarQubeService sonarQubeService;
 
+    @Autowired
     public CodeReviewService(CodeReviewRepository repository, GitHubService gitHubService, CheckStyleService checkStyleService, SonarQubeService sonarQubeService) {
         this.repository = repository;
         this.gitHubService = gitHubService;
@@ -87,7 +89,7 @@ public class CodeReviewService {
     private List<Issue> analyzeFile(String repoOwner, String repoName, String file, String diff) {
 
         List<Issue> issues = new ArrayList<>();
-        String projectKey  = repoName + "_" + repoName;
+        String projectKey  = repoOwner + "_" + repoName;
         if (file.endsWith(".java")) {
             issues.addAll(checkStyleService.analyzeJavaFile(file, diff));
             issues.addAll(sonarQubeService.analyzeJavaFile(projectKey, file));
