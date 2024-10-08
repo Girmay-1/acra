@@ -5,6 +5,7 @@ import com.acra.model.CodeReview;
 import com.acra.model.RuleSet;
 import com.acra.service.CodeReviewService;
 import com.acra.service.RuleSetService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
@@ -16,7 +17,7 @@ import java.util.List;
 public class CodeReviewResolver {
     private final CodeReviewService codeReviewService;
     private final RuleSetService ruleSetService;
-
+    @Autowired
     public CodeReviewResolver(CodeReviewService codeReviewService, RuleSetService ruleSetService) {
         this.codeReviewService = codeReviewService;
         this.ruleSetService = ruleSetService;
