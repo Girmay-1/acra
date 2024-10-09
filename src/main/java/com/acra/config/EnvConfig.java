@@ -30,7 +30,7 @@ public class EnvConfig {
         }
         MapPropertySource propertySource = new MapPropertySource("dotenvProperties", properties);
         env.getPropertySources().addFirst(propertySource);
-        logger.info("Added dotenv properties to environment. GITHUB_TOKEN present: " + properties.containsKey("GITHUB_TOKEN"));
+        logger.info("Added dotenv properties to environment. GITHUB_TOKEN present: {}",  properties.containsKey("GITHUB_TOKEN"));
         return propertySource;
     }
 }
