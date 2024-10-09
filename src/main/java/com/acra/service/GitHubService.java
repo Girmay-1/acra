@@ -17,7 +17,11 @@ public class GitHubService {
 
     private final GitHub github;
 
-    public GitHubService(@Value("${github.token}") String githubToken) throws IOException {
+    public GitHubService(@Value("${github.token:}") String githubToken) throws IOException {
+        if (githubToken == null || githubToken.isEmpty()) {
+            logger.error("GitHub token is not set. Please set the GITHUB_TOKEN environment variable.");
+            throw new IllegalStateException("GitHub token is not set");
+        }
         this.github = new GitHubBuilder().withOAuthToken(githubToken).build();
     }
 
