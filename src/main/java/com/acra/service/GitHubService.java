@@ -18,13 +18,15 @@ public class GitHubService {
     private final GitHub github;
 
     public GitHubService(@Value("${github.token:}") String githubToken) throws IOException {
+        logger.info("Initializing GitHubService");
+        logger.debug("GitHub token length: " + (githubToken != null ? githubToken.length() : 0));
         if (githubToken == null || githubToken.isEmpty()) {
             logger.error("GitHub token is not set. Please set the GITHUB_TOKEN environment variable.");
             throw new IllegalStateException("GitHub token is not set");
         }
         this.github = new GitHubBuilder().withOAuthToken(githubToken).build();
+        logger.info("GitHubService initialized successfully");
     }
-
     public PullRequest getPullRequest(String repoOwner, String repoName, int pullRequestNumber) {
         try {
             GHRepository repository = github.getRepository(repoOwner + "/" + repoName);
