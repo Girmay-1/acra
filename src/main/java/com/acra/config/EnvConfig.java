@@ -14,9 +14,11 @@ import java.util.Map;
 
 @Configuration
 public class EnvConfig {
-    static final Logger logger = LoggerFactory.getLogger(EnvConfig.class);
+    private static final Logger logger = LoggerFactory.getLogger(EnvConfig.class);
+
     @Bean
     public Dotenv dotenv() {
+        logger.info("Loading .env file");
         return Dotenv.load();
     }
 
@@ -28,7 +30,7 @@ public class EnvConfig {
         }
         MapPropertySource propertySource = new MapPropertySource("dotenvProperties", properties);
         env.getPropertySources().addFirst(propertySource);
-        logger.info("properties:", env);
+        logger.info("Added dotenv properties to environment. GITHUB_TOKEN present: {}",  properties.containsKey("GITHUB_TOKEN"));
         return propertySource;
     }
 }
