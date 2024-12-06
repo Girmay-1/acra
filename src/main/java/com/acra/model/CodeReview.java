@@ -1,19 +1,15 @@
 package com.acra.model;
 
-import lombok.Data;
-import java.time.Instant;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
-@Data
-public class CodeReview {
-    private Long id;
-    private Integer pullRequestNumber;
-    private ReviewStatus status;
-    private Float codeQualityScore;
-    private Float securityScore;
-    private Float performanceScore;
-    private List<Issue> issues;
-    private Instant createdAt;
-    private String repoOwner;
-    private String repoName;
-}
+public record CodeReview(
+    UUID id,
+    String repositoryUrl,
+    String pullRequestNumber,
+    String commitHash,
+    String status,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt,
+    Double overallScore
+) {}
