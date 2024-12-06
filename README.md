@@ -19,7 +19,7 @@ The Automated Code Review Assistant (ACRA) is a system that integrates with vers
 
 ## Technology Stack
 - Java 17
-- Spring Boot 3.3.4
+- Spring Boot 3.1.5
 - GraphQL
 - PostgreSQL
 - Docker
