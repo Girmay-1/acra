@@ -1,157 +1,80 @@
 package com.acra.service;
 
-import com.acra.exception.ReviewNotFoundException;
-import com.acra.model.*;
-import com.acra.repository.CodeReviewRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
+import com.acra.dao.CodeReviewDao;
+import com.acra.dao.ReviewCommentDao;
+import com.acra.exception.ReviewException;
+import com.acra.model.CodeReview;
+import com.acra.model.ReviewComment;
 import org.springframework.stereotype.Service;
-import org.springframework.scheduling.annotation.Async;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 @Service
 public class CodeReviewService {
-    private static final Logger logger = LoggerFactory.getLogger(CodeReviewService.class);
-
-    private final CodeReviewRepository repository;
+    private final CodeReviewDao reviewDao;
+    private final ReviewCommentDao commentDao;
     private final GitHubService gitHubService;
-
-    private final CheckStyleService checkStyleService;
-
     private final SonarQubeService sonarQubeService;
 
-    @Autowired
-    public CodeReviewService(CodeReviewRepository repository, GitHubService gitHubService, CheckStyleService checkStyleService, SonarQubeService sonarQubeService) {
-        this.repository = repository;
+    public CodeReviewService(
+            CodeReviewDao reviewDao,
+            ReviewCommentDao commentDao,
+            GitHubService gitHubService,
+            SonarQubeService sonarQubeService) {
+        this.reviewDao = reviewDao;
+        this.commentDao = commentDao;
         this.gitHubService = gitHubService;
-        this.checkStyleService = checkStyleService;
         this.sonarQubeService = sonarQubeService;
     }
 
-    public CodeReview initiateReview(String repoOwner, String repoName, int pullRequestNumber) {
-        PullRequest pullRequest = gitHubService.getPullRequest(repoOwner, repoName, pullRequestNumber);
-
-        CodeReview review = new CodeReview();
-        review.setPullRequestNumber(pullRequestNumber);
-        review.setStatus(ReviewStatus.IN_PROGRESS);
-        review.setCreatedAt(Instant.now());
-        review.setRepoOwner(repoOwner);
-        review.setRepoName(repoName);
-
-        review = repository.save(review);
-
-        asyncReviewProcess(review, pullRequest);
-
+    public CodeReview initiateReview(String repositoryUrl, String pullRequestNumber, String commitHash) {
+        CodeReview review = new CodeReview(
+            UUID.randomUUID(),
+            repositoryUrl,
+            pullRequestNumber,
+            commitHash,
+            "PENDING",
+            LocalDateTime.now(),
+            LocalDateTime.now(),
+            null
+        );
+        
+        review = reviewDao.create(review);
+        startAnalysis(review);
         return review;
     }
 
-    @Async
-    public void asyncReviewProcess(CodeReview review, PullRequest pullRequest) {
-        try {
-            List<String> files = gitHubService.getPullRequestFiles(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
-            String diff = gitHubService.getPullRequestDiff(review.getRepoOwner(), review.getRepoName(), review.getPullRequestNumber());
-
-            List<CompletableFuture<List<Issue>>> futureIssues = files.parallelStream()
-                    .map(file -> CompletableFuture.supplyAsync(() ->
-                            analyzeFile(review.getRepoOwner(), review.getRepoName(), file, diff)))
-                    .collect(Collectors.toList());
-
-            List<Issue> issues = futureIssues.stream()
-                    .flatMap(future -> future.join().stream())
-                    .collect(Collectors.toList());
-
-            float codeQualityScore = calculateCodeQualityScore(issues);
-            float securityScore = calculateSecurityScore(issues);
-            float performanceScore = calculatePerformanceScore(issues);
-
-            review.setIssues(issues);
-            review.setCodeQualityScore(codeQualityScore);
-            review.setSecurityScore(securityScore);
-            review.setPerformanceScore(performanceScore);
-            review.setStatus(ReviewStatus.COMPLETED);
-
-            repository.update(review);
-        } catch (Exception e) {
-            logger.error("Error during async review process", e);
-            review.setStatus(ReviewStatus.FAILED);
-            repository.update(review);
-        }
+    private void startAnalysis(CodeReview review) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                reviewDao.updateStatus(review.id(), "IN_PROGRESS", LocalDateTime.now());
+                
+                var codeBase = gitHubService.checkoutPullRequest(review.repositoryUrl(), review.pullRequestNumber());
+                var comments = sonarQubeService.analyze(codeBase);
+                
+                for (ReviewComment comment : comments) {
+                    commentDao.create(comment);
+                }
+                
+                gitHubService.postComments(review.repositoryUrl(), review.pullRequestNumber(), comments);
+                reviewDao.updateStatus(review.id(), "COMPLETED", LocalDateTime.now());
+                
+            } catch (Exception e) {
+                reviewDao.updateStatus(review.id(), "FAILED", LocalDateTime.now());
+                throw new ReviewException.AnalysisFailed("Code analysis failed", e);
+            }
+        });
     }
 
-    private List<Issue> analyzeFile(String repoOwner, String repoName, String file, String diff) {
-
-        List<Issue> issues = new ArrayList<>();
-        String projectKey  = repoOwner + "_" + repoName;
-        if (file.endsWith(".java")) {
-            issues.addAll(checkStyleService.analyzeJavaFile(file, diff));
-            issues.addAll(sonarQubeService.analyzeJavaFile(projectKey, file));
-        } else if (file.endsWith(".py")) {
-            issues.addAll(sonarQubeService.analyzePythonFile(projectKey, file));
-        } else if (file.endsWith(".js")) {
-            issues.addAll(sonarQubeService.analyzeJavaScriptFile(projectKey, file));
-        }
-        // Add more file type checks as needed
-        return issues;
+    public CodeReview getReview(UUID id) {
+        return reviewDao.findById(id)
+            .orElseThrow(() -> new ReviewException.NotFound("Review not found: " + id));
     }
 
-    private float calculateCodeQualityScore(List<Issue> issues) {
-        int weightedIssues = issues.stream()
-                .mapToInt(issue -> getWeightForSeverity(issue.getSeverity()))
-                .sum();
-
-        return Math.max(0, 100 - (weightedIssues * 2));
-    }
-
-    private int getWeightForSeverity(IssueSeverity severity) {
-        switch (severity) {
-            case LOW:
-                return 1;
-            case MEDIUM:
-                return 3;
-            case HIGH:
-                return 5;
-            case CRITICAL:
-                return 10;
-            default:
-                return 0;
-        }
-    }
-
-
-    private float calculateSecurityScore(List<Issue> issues) {
-        long securityIssues = issues.stream()
-                .filter(i -> i.getType() == IssueType.SECURITY_VULNERABILITY)
-                .count();
-
-        return Math.max(0, 100 - (securityIssues * 20));
-    }
-
-    private float calculatePerformanceScore(List<Issue> issues) {
-        long performanceIssues = issues.stream()
-                .filter(i -> i.getType() == IssueType.PERFORMANCE_ISSUE)
-                .count();
-
-        return Math.max(0, 100 - (performanceIssues * 15));
-    }
-
-    @Cacheable(value = "reviewCache", key = "{#repoOwner, #repoName, #pullRequestNumber}")
-    public CodeReview getReviewForPullRequest(String repoOwner, String repoName, int pullRequestNumber) {
-        return repository.findByRepoOwnerAndRepoName(repoOwner, repoName).stream()
-                .filter(review -> review.getPullRequestNumber() == pullRequestNumber)
-                .findFirst()
-                .orElseThrow(() -> new ReviewNotFoundException("Review not found for the given pull request"));
-    }
-
-    @Cacheable(value = "reviewHistoryCache", key = "{#repoOwner, #repoName}")
-    public List<CodeReview> getReviewHistory(String repoOwner, String repoName) {
-        return repository.findByRepoOwnerAndRepoName(repoOwner, repoName);
+    public List<CodeReview> getReviews(String repositoryUrl) {
+        return reviewDao.findByRepository(repositoryUrl);
     }
 }

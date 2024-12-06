@@ -1,97 +1,140 @@
 package com.acra.service;
-import com.acra.model.Issue;
-import com.acra.model.IssueSeverity;
-import com.acra.model.IssueType;
+
+import com.acra.exception.ReviewException;
+import com.acra.model.ReviewComment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.sonarqube.ws.Issues.Issue;
 import org.sonarqube.ws.client.HttpConnector;
 import org.sonarqube.ws.client.WsClient;
 import org.sonarqube.ws.client.WsClientFactories;
-import org.sonarqube.ws.Issues.SearchWsResponse;
 import org.sonarqube.ws.client.issues.SearchRequest;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class SonarQubeService {
-    private final WsClient wsClient;
+    private static final Logger log = LoggerFactory.getLogger(SonarQubeService.class);
+    
+    private final WsClient client;
+    private final String serverUrl;
+    private final String token;
+    private final String projectKey;
 
-    public SonarQubeService(@Value("${sonar.url}") String sonarUrl,
-                            @Value("${sonar.token}") String sonarToken) {
+    public SonarQubeService(
+            @Value("${sonarqube.url}") String serverUrl,
+            @Value("${sonarqube.token}") String token,
+            @Value("${sonarqube.projectKey:acra}") String projectKey) {
+        this.serverUrl = serverUrl;
+        this.token = token;
+        this.projectKey = projectKey;
+        
         HttpConnector connector = HttpConnector.newBuilder()
-                .url(sonarUrl)
-                .token(sonarToken)
-                .build();
-        this.wsClient = WsClientFactories.getDefault().newClient(connector);
+            .url(serverUrl)
+            .token(token)
+            .build();
+        this.client = WsClientFactories.getDefault().newClient(connector);
+        
+        log.info("SonarQubeService initialized with server: {}", serverUrl);
     }
 
-    public List<Issue> analyzeJavaFile(String projectKey, String filePath) {
-        return analyzeFile(projectKey, filePath, "java");
-    }
-
-    public List<Issue> analyzePythonFile(String projectKey, String filePath) {
-        return analyzeFile(projectKey, filePath, "py");
-    }
-
-    public List<Issue> analyzeJavaScriptFile(String projectKey, String filePath) {
-        return analyzeFile(projectKey, filePath, "js");
-    }
-
-    private List<Issue> analyzeFile(String projectKey, String filePath, String language) {
-        SearchRequest request = new SearchRequest()
-                .setProjects(Collections.singletonList(projectKey))
-                .setComponentKeys(Collections.singletonList(filePath))
-                .setLanguages(Collections.singletonList(language))
-                .setSeverities(Arrays.asList("BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"));
-
-        SearchWsResponse response = wsClient.issues().search(request);
-
-        return response.getIssuesList().stream()
-                .map(this::convertSonarIssueToAcraIssue)
-                .collect(Collectors.toList());
-    }
-
-    private Issue convertSonarIssueToAcraIssue(org.sonarqube.ws.Issues.Issue sonarIssue) {
-        Issue acraIssue = new Issue();
-        acraIssue.setFile(sonarIssue.getComponent());
-        acraIssue.setLine(sonarIssue.getLine());
-        acraIssue.setMessage(sonarIssue.getMessage());
-        acraIssue.setSeverity(mapSeverity(String.valueOf(sonarIssue.getSeverity())));
-        acraIssue.setType(mapType(String.valueOf(sonarIssue.getType())));
-        return acraIssue;
-    }
-
-    private IssueSeverity mapSeverity(String sonarSeverity) {
-        switch (sonarSeverity) {
-            case "BLOCKER":
-            case "CRITICAL":
-                return IssueSeverity.CRITICAL;
-            case "MAJOR":
-                return IssueSeverity.HIGH;
-            case "MINOR":
-                return IssueSeverity.MEDIUM;
-            case "INFO":
-                return IssueSeverity.LOW;
-            default:
-                return IssueSeverity.MEDIUM; // Default case
+    public List<ReviewComment> analyze(Path codeBase) {
+        try {
+            log.info("Starting SonarQube analysis of {}", codeBase);
+            
+            String analysisId = runSonarScanner(codeBase);
+            waitForAnalysisToComplete(analysisId);
+            List<ReviewComment> comments = fetchIssues();
+            
+            log.info("Analysis completed. Found {} issues", comments.size());
+            return comments;
+            
+        } catch (Exception e) {
+            String message = "Failed to analyze code with SonarQube";
+            log.error(message, e);
+            throw new ReviewException.AnalysisFailed(message, e);
         }
     }
 
-    private IssueType mapType(String sonarType) {
-        switch (sonarType) {
-            case "BUG":
-                return IssueType.POTENTIAL_BUG;
-            case "VULNERABILITY":
-                return IssueType.SECURITY_VULNERABILITY;
-            case "CODE_SMELL":
-                return IssueType.CODE_STYLE;
-            case "SECURITY_HOTSPOT":
-                return IssueType.SECURITY_VULNERABILITY;
+    private String runSonarScanner(Path codeBase) throws IOException, InterruptedException {
+        log.debug("Running SonarQube scanner on {}", codeBase);
+        
+        ProcessBuilder pb = new ProcessBuilder(
+            "sonar-scanner",
+            "-Dsonar.projectKey=" + projectKey,
+            "-Dsonar.sources=" + codeBase.toString(),
+            "-Dsonar.host.url=" + serverUrl,
+            "-Dsonar.login=" + token,
+            "-Dsonar.java.binaries=" + codeBase.resolve("target/classes"),
+            "-Dsonar.sourceEncoding=UTF-8"
+        );
+        
+        Process process = pb.start();
+        int exitCode = process.waitFor();
+        
+        if (exitCode != 0) {
+            String error = "SonarQube scanner failed with exit code: " + exitCode;
+            throw new ReviewException.AnalysisFailed(error, new RuntimeException(error));
+        }
+        
+        return projectKey + "_" + System.currentTimeMillis();
+    }
+
+    private void waitForAnalysisToComplete(String analysisId) throws InterruptedException {
+        log.debug("Waiting for analysis {} to complete", analysisId);
+        TimeUnit.SECONDS.sleep(30);
+    }
+
+    private List<ReviewComment> fetchIssues() {
+        log.debug("Fetching analysis results");
+        List<ReviewComment> comments = new ArrayList<>();
+        
+        SearchRequest request = new SearchRequest()
+            .setProjects(Arrays.asList(projectKey))
+            .setTypes(Arrays.asList("BUG", "VULNERABILITY", "CODE_SMELL"));
+
+        var response = client.issues().search(request);
+        List<Issue> issues = response.getIssuesList();
+        
+        for (Issue issue : issues) {
+            String severity = issue.getSeverity().name();
+            comments.add(new ReviewComment(
+                UUID.randomUUID(),
+                null,
+                issue.getComponent(), // This is the file path in SonarQube
+                issue.getLine(),
+                issue.getMessage(),
+                mapSeverity(severity),
+                "sonar:" + issue.getRule(),
+                LocalDateTime.now()
+            ));
+        }
+        
+        return comments;
+    }
+
+    private String mapSeverity(String sonarSeverity) {
+        if (sonarSeverity == null) {
+            return "INFO";
+        }
+        
+        switch (sonarSeverity.toUpperCase()) {
+            case "BLOCKER":
+            case "CRITICAL":
+                return "ERROR";
+            case "MAJOR":
+                return "WARNING";
             default:
-                return IssueType.CODE_STYLE; // Default case
+                return "INFO";
         }
     }
 }

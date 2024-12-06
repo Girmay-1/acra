@@ -1,73 +1,38 @@
+scalar DateTime
+
 type Query {
-    getReviewForPullRequest(repoOwner: String!, repoName: String!, pullRequestNumber: Int!): CodeReview
-    getReviewHistory(repoOwner: String!, repoName: String!): [CodeReview]
+    codeReview(id: ID!): CodeReview
+    codeReviews(repositoryUrl: String!): [CodeReview!]!
 }
 
 type Mutation {
-    triggerReview(repoOwner: String!, repoName: String!, pullRequestNumber: Int!): CodeReview
-    updateRuleSet(ruleSetInput: RuleSetInput!): RuleSet
+    initiateCodeReview(input: CodeReviewInput!): CodeReview!
 }
 
 type CodeReview {
     id: ID!
-    pullRequestNumber: Int!
-    status: ReviewStatus!
-    codeQualityScore: Float
-    securityScore: Float
-    performanceScore: Float
-    issues: [Issue]
-    createdAt: String!
+    repositoryUrl: String!
+    pullRequestNumber: String!
+    commitHash: String!
+    status: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    overallScore: Float
+    comments: [ReviewComment!]!
 }
 
-type Issue {
+type ReviewComment {
     id: ID!
-    type: IssueType!
-    severity: IssueSeverity!
-    file: String!
-    line: Int
+    filePath: String!
+    lineNumber: Int!
     message: String!
+    severity: String!
+    ruleId: String!
+    createdAt: DateTime!
 }
 
-type RuleSet {
-    id: ID!
-    name: String!
-    rules: [Rule]
-}
-
-type Rule {
-    id: ID!
-    name: String!
-    description: String
-    enabled: Boolean!
-}
-
-input RuleSetInput {
-    name: String!
-    rules: [RuleInput]!
-}
-
-input RuleInput {
-    name: String!
-    description: String
-    enabled: Boolean!
-}
-
-enum ReviewStatus {
-    IN_PROGRESS
-    COMPLETED
-    FAILED
-}
-
-enum IssueType {
-    CODE_STYLE
-    POTENTIAL_BUG
-    SECURITY_VULNERABILITY
-    PERFORMANCE_ISSUE
-}
-
-enum IssueSeverity {
-    LOW
-    MEDIUM
-    HIGH
-    CRITICAL
+input CodeReviewInput {
+    repositoryUrl: String!
+    pullRequestNumber: String!
+    commitHash: String!
 }
